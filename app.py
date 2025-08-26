@@ -4,7 +4,7 @@ import logging
 from datetime import datetime
 from flask import Flask, request, jsonify, send_file
 from flask_cors import CORS
-import openai
+import openai  # 保持旧版本导入方式
 from werkzeug.utils import secure_filename
 import sqlite3
 from pathlib import Path
@@ -24,12 +24,8 @@ app.config['SECRET_KEY'] = 'your-secret-key-here'
 app.config['UPLOAD_FOLDER'] = 'uploads'
 app.config['MAX_CONTENT_LENGTH'] = 16 * 1024 * 1024  # 16MB
 
-# OpenAI配置 - 使用新的客户端方式
-from openai import OpenAI
-
-client = OpenAI(
-    api_key="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"
-)
+# OpenAI配置 - 使用旧版本(0.28.1)的配置方式
+openai.api_key = "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"
 
 from flask import send_from_directory
 
@@ -429,7 +425,7 @@ class MuseumGuideSystem:
             # 找到距离最近的下一个点
             closest = min(remaining, key=lambda item: 
                 (item['coordinates']['x'] - last_pos['x'])**2 + 
-                (item['coordinates']['y'] - last_pos['y'])**2
+                (item['coordinates']['y'] - last_pos['y'])** 2
             )
             
             optimized.append(closest)
@@ -457,8 +453,8 @@ class MuseumGuideSystem:
                 if item_id in self.knowledge_base:
                     context_info = f"当前藏品信息：\n{self.knowledge_base[item_id]}\n\n"
             
-            # 调用OpenAI API - 使用新的客户端方式
-            response = client.chat.completions.create(
+            # 调用OpenAI API - 使用旧版本(0.28.1)的调用方式
+            response = openai.ChatCompletion.create(
                 model="gpt-3.5-turbo",
                 messages=[
                     {"role": "system", "content": system_prompt},
@@ -534,8 +530,8 @@ class MuseumGuideSystem:
                 conn.close()
                 return result[0]
             
-            # 生成新的音频
-            response = client.audio.speech.create(
+            # 生成新的音频 - 使用旧版本(0.28.1)的调用方式
+            response = openai.Audio.create(
                 model="tts-1",  # 或使用 "tts-1-hd" 获得更高质量
                 voice=voice,
                 input=text,
