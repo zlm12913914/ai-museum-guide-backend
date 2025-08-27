@@ -4,7 +4,7 @@ import logging
 from datetime import datetime
 from flask import Flask, request, jsonify, send_file
 from flask_cors import CORS
-import openai  # 保持旧版本导入方式
+from openai import OpenAI  # 新版本导入方式
 from werkzeug.utils import secure_filename
 import sqlite3
 from pathlib import Path
@@ -24,15 +24,21 @@ app.config['SECRET_KEY'] = 'your-secret-key-here'
 app.config['UPLOAD_FOLDER'] = 'uploads'
 app.config['MAX_CONTENT_LENGTH'] = 16 * 1024 * 1024  # 16MB
 
-# OpenAI配置 - 使用旧版本(0.28.1)的配置方式
-openai.api_key = "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"
+api_key = os.getenv("OPENAI_API_KEY")
+
+# OpenAI配置 - 使用新版本(1.12.0)的配置方式
+client = OpenAI(
+    api_key=api_key
+)
 
 from flask import send_from_directory
+
 
 # 添加对根目录下 index.html 的访问支持
 @app.route('/index.html')
 def serve_index():
     return send_from_directory('.', 'index.html')
+
 
 # 创建必要的目录
 os.makedirs('data', exist_ok=True)
@@ -40,6 +46,7 @@ os.makedirs('uploads', exist_ok=True)
 os.makedirs('knowledge_base', exist_ok=True)
 os.makedirs('logs', exist_ok=True)
 os.makedirs('audio_cache', exist_ok=True)  # 音频缓存目录
+
 
 class MuseumGuideSystem:
     def __init__(self):
@@ -49,12 +56,12 @@ class MuseumGuideSystem:
         self.audio_cache_dir = 'audio_cache'
         self.init_database()
         self.load_museum_data()
-    
+
     def init_database(self):
         """初始化SQLite数据库"""
         conn = sqlite3.connect('data/museum_guide.db')
         cursor = conn.cursor()
-        
+
         # 创建用户反馈表
         cursor.execute('''
             CREATE TABLE IF NOT EXISTS feedback (
@@ -67,7 +74,7 @@ class MuseumGuideSystem:
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             )
         ''')
-        
+
         # 创建访问日志表
         cursor.execute('''
             CREATE TABLE IF NOT EXISTS visit_logs (
@@ -79,7 +86,7 @@ class MuseumGuideSystem:
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             )
         ''')
-        
+
         # 创建音频缓存表
         cursor.execute('''
             CREATE TABLE IF NOT EXISTS audio_cache (
@@ -90,10 +97,10 @@ class MuseumGuideSystem:
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             )
         ''')
-        
+
         conn.commit()
         conn.close()
-    
+
     def load_museum_data(self):
         """加载博物馆数据"""
         try:
@@ -103,20 +110,20 @@ class MuseumGuideSystem:
                     self.artifacts_nodes = json.load(f)
             else:
                 self.create_sample_nodes()
-            
+
             # 加载关系数据
             if os.path.exists(self.relations_file):
                 with open(self.relations_file, 'r', encoding='utf-8') as f:
                     self.spatial_relations = json.load(f)
             else:
                 self.create_sample_relations()
-            
+
             # 加载知识库
             self.load_knowledge_base()
-            
+
         except Exception as e:
             logger.error(f"加载博物馆数据失败: {e}")
-    
+
     def create_sample_nodes(self):
         """创建示例节点数据"""
         self.artifacts_nodes = {
@@ -134,7 +141,7 @@ class MuseumGuideSystem:
                     "estimated_time": 5
                 },
                 {
-                    "id": "item_002", 
+                    "id": "item_002",
                     "name": "青铜神树",
                     "category": "青铜器",
                     "period": "商晚期",
@@ -172,7 +179,7 @@ class MuseumGuideSystem:
                 {
                     "id": "item_005",
                     "name": "青花瓷瓶",
-                    "category": "瓷器", 
+                    "category": "瓷器",
                     "period": "明代",
                     "location": "瓷器展区",
                     "coordinates": {"x": 25, "y": 35},
@@ -183,10 +190,10 @@ class MuseumGuideSystem:
                 }
             ]
         }
-        
+
         with open(self.nodes_file, 'w', encoding='utf-8') as f:
             json.dump(self.artifacts_nodes, f, ensure_ascii=False, indent=2)
-    
+
     def create_sample_relations(self):
         """创建示例空间关系数据"""
         self.spatial_relations = {
@@ -203,7 +210,7 @@ class MuseumGuideSystem:
                             "artifacts": ["item_001"]
                         },
                         {
-                            "name": "中央展区", 
+                            "name": "中央展区",
                             "bounds": {"x1": 10, "y1": 10, "x2": 30, "y2": 20},
                             "artifacts": ["item_002"]
                         },
@@ -232,18 +239,18 @@ class MuseumGuideSystem:
                 {"from": "item_004", "to": "item_005", "distance": 12, "direction": "向右前行"}
             ]
         }
-        
+
         with open(self.relations_file, 'w', encoding='utf-8') as f:
             json.dump(self.spatial_relations, f, ensure_ascii=False, indent=2)
-    
+
     def load_knowledge_base(self):
         """加载知识库文档"""
         self.knowledge_base = {}
         kb_dir = Path(self.knowledge_base_dir)
-        
+
         if not kb_dir.exists():
             self.create_sample_knowledge_base()
-        
+
         for file_path in kb_dir.glob('*.txt'):
             try:
                 with open(file_path, 'r', encoding='utf-8') as f:
@@ -252,7 +259,7 @@ class MuseumGuideSystem:
                     self.knowledge_base[artifact_id] = content
             except Exception as e:
                 logger.error(f"加载知识库文件 {file_path} 失败: {e}")
-    
+
     def create_sample_knowledge_base(self):
         """创建示例知识库"""
         knowledge_data = {
@@ -354,32 +361,33 @@ class MuseumGuideSystem:
 收藏价值：
 明代永乐青花瓷器被誉为青花瓷器的黄金时代，工艺精湛，存世量稀少，具有极高的收藏价值和研究价值。这件瓷瓶代表了明代官窑青花瓷器的最高水准。"""
         }
-        
+
         for artifact_id, content in knowledge_data.items():
             file_path = Path(self.knowledge_base_dir) / f"{artifact_id}.txt"
             with open(file_path, 'w', encoding='utf-8') as f:
                 f.write(content)
-    
+
     def generate_personalized_route(self, user_profile):
         """生成个性化参观路线"""
         try:
-            available_items = self.artifacts_nodes['artifacts'].copy()
-            
+            print(self.artifacts_nodes.keys())  # 查看所有键
+            available_items = self.artifacts_nodes['artifacts_nodes.json']['artifacts'].copy()
+
             # 根据兴趣过滤
             if user_profile['interests']:
                 filtered_items = []
                 for item in available_items:
                     for interest in user_profile['interests']:
-                        if (interest in item.get('keywords', []) or 
-                            interest in item.get('category', '') or
-                            interest in item.get('importance', '') or
-                            interest in item.get('popularity', '')):
+                        if (interest in item.get('keywords', []) or
+                                interest in item.get('category', '') or
+                                interest in item.get('importance', '') or
+                                interest in item.get('popularity', '')):
                             filtered_items.append(item)
                             break
-                
+
                 if filtered_items:
                     available_items = filtered_items
-            
+
             # 根据参观时长选择藏品数量
             duration = user_profile['duration']
             if duration == '10分钟':
@@ -388,73 +396,73 @@ class MuseumGuideSystem:
                 max_items = 4
             else:  # 60分钟
                 max_items = len(available_items)
-            
+
             # 按重要性和热门程度排序
             available_items.sort(key=lambda x: (
                 x.get('importance') == '珍品',
                 x.get('popularity') == '热门'
             ), reverse=True)
-            
+
             selected_items = available_items[:max_items]
-            
+
             # 优化路线顺序（简单的距离优化）
             if len(selected_items) > 1:
                 selected_items = self.optimize_route(selected_items)
-            
+
             return selected_items
-            
+
         except Exception as e:
             error_msg = traceback.format_exc()
             print("详细错误信息:\n", error_msg)
             logger.error(f"生成个性化路线失败: {e}")
             return self.artifacts_nodes['artifacts'][:3]  # 返回默认路线
-    
+
     def optimize_route(self, items):
         """优化参观路线顺序"""
         if len(items) <= 1:
             return items
-        
+
         # 简单的贪心算法优化路线
         optimized = [items[0]]  # 从第一个开始
         remaining = items[1:]
-        
+
         while remaining:
             last_item = optimized[-1]
             last_pos = last_item['coordinates']
-            
+
             # 找到距离最近的下一个点
-            closest = min(remaining, key=lambda item: 
-                (item['coordinates']['x'] - last_pos['x'])**2 + 
-                (item['coordinates']['y'] - last_pos['y'])** 2
-            )
-            
+            closest = min(remaining, key=lambda item:
+            (item['coordinates']['x'] - last_pos['x']) ** 2 +
+            (item['coordinates']['y'] - last_pos['y']) ** 2
+                          )
+
             optimized.append(closest)
             remaining.remove(closest)
-        
+
         return optimized
-    
+
     def get_navigation_info(self, from_item_id, to_item_id):
         """获取导航信息"""
         for path in self.spatial_relations['paths']:
             if path['from'] == from_item_id and path['to'] == to_item_id:
                 return path
         return None
-    
+
     def process_user_question(self, question, user_profile, current_context):
         """处理用户问题"""
         try:
             # 构建系统提示词
             system_prompt = self.build_system_prompt(user_profile, current_context)
-            
+
             # 准备上下文信息
             context_info = ""
             if current_context.get('current_item'):
                 item_id = current_context['current_item']
                 if item_id in self.knowledge_base:
                     context_info = f"当前藏品信息：\n{self.knowledge_base[item_id]}\n\n"
-            
-            # 调用OpenAI API - 使用旧版本(0.28.1)的调用方式
-            response = openai.ChatCompletion.create(
+
+            # 调用OpenAI API - 使用新版本(1.12.0)的调用方式
+            response = client.chat.completions.create(
                 model="gpt-3.5-turbo",
                 messages=[
                     {"role": "system", "content": system_prompt},
@@ -463,13 +471,13 @@ class MuseumGuideSystem:
                 max_tokens=500,
                 temperature=0.7
             )
-            
+
             return response.choices[0].message.content.strip()
-            
+
         except Exception as e:
             logger.error(f"处理用户问题失败: {e}")
             return "抱歉，我暂时无法回答您的问题，请您稍后再试。"
-    
+
     def build_system_prompt(self, user_profile, context):
         """构建系统提示词"""
         age_desc = {
@@ -478,7 +486,7 @@ class MuseumGuideSystem:
             '35-50': '中年人',
             '50+': '老年人'
         }.get(user_profile['age'], '参观者')
-        
+
         prompt = f"""您是四川博物院古代四川馆的AI导览员。您正在为一位{user_profile['gender']}性{age_desc}（{user_profile['education']}文化程度）提供服务。
 
 参观者信息：
@@ -498,14 +506,14 @@ class MuseumGuideSystem:
 7. 直接给出最终答案，不需要展示思考过程
 
 请以自然的对话方式回答问题。"""
-        
+
         return prompt
-    
+
     async def generate_speech(self, text, voice="alloy", user_profile=None):
         """使用OpenAI TTS生成语音"""
         try:
             import hashlib
-            
+
             # 根据用户语言选择声音
             if user_profile and user_profile.get('language') == 'English':
                 voice = "nova"  # 英文使用nova声音
@@ -514,35 +522,35 @@ class MuseumGuideSystem:
                 if user_profile and user_profile.get('gender') == '女':
                     voice = "shimmer"  # 女性声音
                 else:
-                    voice = "alloy"    # 男性声音
-            
+                    voice = "alloy"  # 男性声音
+
             # 生成文本哈希用于缓存
             text_hash = hashlib.md5((text + voice).encode('utf-8')).hexdigest()
-            
+
             # 检查缓存
             conn = sqlite3.connect('data/museum_guide.db')
             cursor = conn.cursor()
             cursor.execute('SELECT file_path FROM audio_cache WHERE text_hash = ?', (text_hash,))
             result = cursor.fetchone()
-            
+
             if result and os.path.exists(result[0]):
                 # 返回缓存的音频文件路径
                 conn.close()
                 return result[0]
-            
-            # 生成新的音频 - 使用旧版本(0.28.1)的调用方式
-            response = openai.Audio.create(
+
+            # 生成新的音频 - 使用新版本(1.12.0)的调用方式
+            response = client.audio.speech.create(
                 model="tts-1",  # 或使用 "tts-1-hd" 获得更高质量
                 voice=voice,
                 input=text,
                 response_format="mp3"
             )
-            
+
             # 保存音频文件
             audio_file_path = os.path.join(self.audio_cache_dir, f"{text_hash}.mp3")
             with open(audio_file_path, 'wb') as f:
                 f.write(response.content)
-            
+
             # 保存到缓存数据库
             cursor.execute('''
                 INSERT OR REPLACE INTO audio_cache (text_hash, voice_model, file_path)
@@ -550,15 +558,17 @@ class MuseumGuideSystem:
             ''', (text_hash, voice, audio_file_path))
             conn.commit()
             conn.close()
-            
+
             return audio_file_path
-            
+
         except Exception as e:
             logger.error(f"生成语音失败: {e}")
             return None
 
+
 # 初始化系统
 guide_system = MuseumGuideSystem()
+
 
 @app.route('/')
 def index():
@@ -569,30 +579,32 @@ def index():
         "features": ["OpenAI TTS", "智能缓存", "个性化语音"]
     })
 
+
 @app.route('/api/generate_route', methods=['POST'])
 def generate_route():
     """生成个性化参观路线"""
     try:
         user_profile = request.json
-        
+
         # 记录访问日志
         log_visit(user_profile)
-        
+
         # 生成路线
         route = guide_system.generate_personalized_route(user_profile)
-        
+
         return jsonify({
             "success": True,
             "route": route,
             "message": "路线生成成功"
         })
-        
+
     except Exception as e:
         logger.error(f"生成路线失败: {e}")
         return jsonify({
             "success": False,
             "message": "生成路线失败，请重试"
         }), 500
+
 
 @app.route('/api/chat', methods=['POST'])
 def chat():
@@ -602,21 +614,22 @@ def chat():
         user_input = data.get('message', '')
         user_profile = data.get('user_profile', {})
         context = data.get('context', {})
-        
+
         # 处理用户问题
         response = guide_system.process_user_question(user_input, user_profile, context)
-        
+
         return jsonify({
             "success": True,
             "response": response
         })
-        
+
     except Exception as e:
         logger.error(f"处理对话失败: {e}")
         return jsonify({
             "success": False,
             "response": "抱歉，我暂时无法回答您的问题，请您稍后再试。"
         }), 500
+
 
 @app.route('/api/generate_speech', methods=['POST'])
 def generate_speech_api():
@@ -625,23 +638,23 @@ def generate_speech_api():
         data = request.json
         text = data.get('text', '')
         user_profile = data.get('user_profile', {})
-        
+
         if not text:
             return jsonify({
                 "success": False,
                 "message": "文本不能为空"
             }), 400
-        
+
         # 异步生成语音（这里简化为同步）
         import asyncio
         audio_file_path = asyncio.run(guide_system.generate_speech(text, user_profile=user_profile))
-        
+
         if audio_file_path and os.path.exists(audio_file_path):
             # 读取音频文件并转为base64
             with open(audio_file_path, 'rb') as f:
                 audio_data = f.read()
                 audio_base64 = base64.b64encode(audio_data).decode('utf-8')
-            
+
             return jsonify({
                 "success": True,
                 "audio_data": audio_base64,
@@ -653,13 +666,14 @@ def generate_speech_api():
                 "success": False,
                 "message": "语音生成失败"
             }), 500
-            
+
     except Exception as e:
         logger.error(f"生成语音失败: {e}")
         return jsonify({
             "success": False,
             "message": "语音生成失败"
         }), 500
+
 
 @app.route('/api/audio/<filename>')
 def serve_audio(filename):
@@ -680,12 +694,13 @@ def serve_audio(filename):
             "message": "音频文件服务失败"
         }), 500
 
+
 @app.route('/api/navigation/<from_id>/<to_id>')
 def get_navigation(from_id, to_id):
     """获取导航信息"""
     try:
         nav_info = guide_system.get_navigation_info(from_id, to_id)
-        
+
         if nav_info:
             return jsonify({
                 "success": True,
@@ -696,13 +711,14 @@ def get_navigation(from_id, to_id):
                 "success": False,
                 "message": "未找到导航路径"
             }), 404
-            
+
     except Exception as e:
         logger.error(f"获取导航信息失败: {e}")
         return jsonify({
             "success": False,
             "message": "获取导航信息失败"
         }), 500
+
 
 @app.route('/api/feedback', methods=['POST'])
 def submit_feedback():
@@ -711,11 +727,11 @@ def submit_feedback():
         data = request.json
         user_profile = data.get('user_profile', {})
         ratings = data.get('ratings', {})
-        
+
         # 保存反馈到数据库
         conn = sqlite3.connect('data/museum_guide.db')
         cursor = conn.cursor()
-        
+
         cursor.execute('''
             INSERT INTO feedback (user_profile, route_rating, content_rating, service_rating, interaction_rating)
             VALUES (?, ?, ?, ?, ?)
@@ -726,21 +742,22 @@ def submit_feedback():
             ratings.get('service', 0),
             ratings.get('interaction', 0)
         ))
-        
+
         conn.commit()
         conn.close()
-        
+
         return jsonify({
             "success": True,
             "message": "反馈提交成功"
         })
-        
+
     except Exception as e:
         logger.error(f"提交反馈失败: {e}")
         return jsonify({
             "success": False,
             "message": "反馈提交失败"
         }), 500
+
 
 @app.route('/api/artifacts')
 def get_artifacts():
@@ -756,6 +773,7 @@ def get_artifacts():
             "success": False,
             "message": "获取藏品信息失败"
         }), 500
+
 
 @app.route('/api/knowledge/<artifact_id>')
 def get_knowledge(artifact_id):
@@ -778,29 +796,31 @@ def get_knowledge(artifact_id):
             "message": "获取信息失败"
         }), 500
 
+
 @app.route('/api/stats')
 def get_stats():
     """获取系统统计信息"""
     try:
         conn = sqlite3.connect('data/museum_guide.db')
         cursor = conn.cursor()
-        
+
         # 获取访问统计
         cursor.execute('SELECT COUNT(*) FROM visit_logs')
         total_visits = cursor.fetchone()[0]
-        
+
         cursor.execute('SELECT COUNT(*) FROM feedback')
         total_feedback = cursor.fetchone()[0]
-        
-        cursor.execute('SELECT AVG(route_rating), AVG(content_rating), AVG(service_rating), AVG(interaction_rating) FROM feedback')
+
+        cursor.execute(
+            'SELECT AVG(route_rating), AVG(content_rating), AVG(service_rating), AVG(interaction_rating) FROM feedback')
         avg_ratings = cursor.fetchone()
-        
+
         # 获取音频缓存统计
         cursor.execute('SELECT COUNT(*) FROM audio_cache')
         cached_audios = cursor.fetchone()[0]
-        
+
         conn.close()
-        
+
         return jsonify({
             "success": True,
             "stats": {
@@ -815,7 +835,7 @@ def get_stats():
                 }
             }
         })
-        
+
     except Exception as e:
         logger.error(f"获取统计信息失败: {e}")
         return jsonify({
@@ -823,26 +843,28 @@ def get_stats():
             "message": "获取统计信息失败"
         }), 500
 
+
 def log_visit(user_profile):
     """记录访问日志"""
     try:
         conn = sqlite3.connect('data/museum_guide.db')
         cursor = conn.cursor()
-        
+
         cursor.execute('''
             INSERT INTO visit_logs (user_profile, tour_route, questions_asked)
             VALUES (?, ?, ?)
         ''', (
             json.dumps(user_profile, ensure_ascii=False),
             "",  # 稍后更新路线信息
-            ""   # 稍后更新问题信息
+            ""  # 稍后更新问题信息
         ))
-        
+
         conn.commit()
         conn.close()
-        
+
     except Exception as e:
         logger.error(f"记录访问日志失败: {e}")
+
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=5000, debug=True)
