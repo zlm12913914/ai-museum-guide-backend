@@ -520,9 +520,9 @@ class MuseumGuideSystem:
             else:
                 # 根据用户性别选择中文声音
                 if user_profile and user_profile.get('gender') == '女':
-                    voice = "marin"  # 女性声音
+                    voice = "shimmer"  # 女性声音
                 else:
-                    voice = "cedar"  # 男性声音
+                    voice = "alloy"  # 男性声音
 
             # 生成文本哈希用于缓存
             text_hash = hashlib.md5((text + voice).encode('utf-8')).hexdigest()
