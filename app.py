@@ -765,5 +765,5 @@ if __name__ == '__main__':
     from gevent import pywsgi
     from geventwebsocket.handler import WebSocketHandler
     print("服务器正在启动，访问 http://127.0.0.1:5000")
-    server = pywsgi.WSGIServer(('', 5000), app, handler_class=WebSocketHandler)
+    server = pywsgi.WSGIServer(('0.0.0.0', 5000), app, handler_class=WebSocketHandler)
     server.serve_forever()
